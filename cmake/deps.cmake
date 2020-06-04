@@ -238,6 +238,7 @@ set(CAIRO_LIBS
     ${CAIRO_LIB}
     ${PIXMAN_LIB}
     ${PNG_LIB}
+    -lz
 )
 set(FREETYPE_LIBS
     ${FREETYPE_LIB}

@@ -1,0 +1,52 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+
+  publish:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, macos-10.15]
+        build_type: [shared, static]
+
+    name: ${{ matrix.os }} (${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Linux dependencies (common)
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        run: sudo apt-get update && sudo apt-get -y install build-essential cmake meson ninja-build python3-setuptools zlib1g-dev
+
+      - name: Install Linux dependencies (shared)
+        if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'shared' }}
+        run: sudo apt-get -y install libcairo2-dev libfreetype-dev
+
+      - name: Install macOS dependencies (common)
+        if: ${{ matrix.os == 'macos-10.15' }}
+        run: brew install cmake meson python3
+
+      - name: Install macOS dependencies (shared)
+        if: ${{ matrix.os == 'macos-10.15' && matrix.build_type == 'shared' }}
+        run: brew install pkg-config cairo freetype
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Build shared
+        if: ${{ matrix.build_type == 'shared' }}
+        run: mkdir -p build && cd build && cmake .. -DUSE_SYSTEM_LIBS=ON && make -j8 release
+
+      - name: Build static
+        if: ${{ matrix.build_type == 'static' }}
+        run: mkdir -p build && cd build && cmake .. -DUSE_SYSTEM_LIBS=OFF && make -j8 release
+
+      - name: Upload binaries
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/blackbox-tools*
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
