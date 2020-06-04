@@ -10,15 +10,36 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-20.04
-            build_type: shared
-          - os: ubuntu-20.04
-            build_type: static
-          - os: macos-10.15
+          - os: windows-2019
             build_type: static
     name: ${{ matrix.os }} (${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set variables
+        id: vars
+        shell: bash
+        run: |
+          if [ ${{ matrix.os }} == windows-2019 ]; then
+            echo "::set-output name=cmake_generator::MinGW Makefiles"
+            # Autotools are too stupid to call binaries with spaces
+            # in their paths, so we need to make a copy of some of
+            # them here.
+            #cp "$(which bash)" .
+            #echo "::add-path::$(pwd)"
+            #S="$(pwd)/bash.exe"
+            ## Convert to windows path
+            #SW=$(echo -n $(echo ${S} | cut -c2):$(echo ${S} | sed 's/\//\\/g' | cut -c3-))
+            #echo "::set-env name=SHELL::${SW}"
+            #echo "::set-env name=MY_SHELL::${SW}"
+          else
+            echo "::set-output name=cmake_generator::Unix Makefiles"
+          fi
+          if [ ${{ matrix.build_type }} == shared ]; then
+            echo ::set-output name=USE_SYSTEM_LIBS::ON
+          else
+            echo ::set-output name=USE_SYSTEM_LIBS::OFF
+          fi
+
       - name: Install Linux dependencies (common)
         if: ${{ matrix.os == 'ubuntu-20.04' }}
         run: sudo apt-get update && sudo apt-get -y install build-essential cmake meson ninja-build python3-setuptools zlib1g-dev
@@ -35,16 +56,21 @@ jobs:
         if: ${{ matrix.os == 'macos-10.15' && matrix.build_type == 'shared' }}
         run: brew install pkg-config cairo freetype
 
+      - name: Install Windows dependencies
+        if: ${{ matrix.os == 'windows-2019' }}
+        run: pip3 install meson ninja
+
       - name: Checkout Code
         uses: actions/checkout@v2
 
-      - name: Build shared
-        if: ${{ matrix.build_type == 'shared' }}
-        run: mkdir -p build && cd build && cmake .. -DUSE_SYSTEM_LIBS=ON && make -j8 release
+      - name: Configure
+        run: |
+          mkdir -p build &&
+          cd build &&
+          cmake -G "${{ steps.vars.outputs.cmake_generator }}" -DUSE_SYSTEM_LIBS=${{ steps.vars.outputs.USE_SYSTEM_LIBS }} ..
 
-      - name: Build static
-        if: ${{ matrix.build_type == 'static' }}
-        run: mkdir -p build && cd build && cmake .. -DUSE_SYSTEM_LIBS=OFF && make -j8 release
+      - name: Build
+        run: cd build && make release
 
       - name: Upload binaries
         uses: svenstaro/upload-release-action@v1-release

@@ -10,6 +10,22 @@ if(NOT NINJA)
     message(FATAL_ERROR "Failed to find ninja, which is required to build bundled dependencies")
 endif()
 
+find_program(SH sh)
+if(NOT SH)
+    message(FATAL_ERROR "Failed to find sh")
+endif()
+if(WIN32)
+# If SH has spaces in its path, Makefiles invoking $SHELL
+# will fail (like pkg-config's does). To avoid this, we
+# copy the binary to our path (which we can control and avoid
+# spaces)
+    set(SH "C:\\msys64\\usr\\bin\\bash.exe")
+    #file(COPY ${SH} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    #get_filename_component(basename ${SH} NAME)
+    #set(SH ${CMAKE_CURRENT_BINARY_DIR}/${basename})
+    #message("-- using shell ${SH}")
+endif()
+
 set(DEPS_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/deps)
 set(DEPS_BIN_DIR ${DEPS_INSTALL_PREFIX}/bin)
 set(DEPS_INCLUDE_DIR ${DEPS_INSTALL_PREFIX}/include)
@@ -62,7 +78,7 @@ ExternalProject_Add(zlib
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
         CFLAGS=${DEPS_CFLAGS}
         LDFLAGS=${DEPS_LDFLAGS}
-        ${ZLIB_SOURCE_DIR}/configure
+        ${SH} ${ZLIB_SOURCE_DIR}/configure
         --prefix=${DEPS_INSTALL_PREFIX}
     BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
     INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install
@@ -85,7 +101,7 @@ ExternalProject_Add(pkg-config
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
         CFLAGS=${DEPS_CFLAGS}
         LDFLAGS=${PKG_CONFIG_LDFLAGS}
-        ${PKG_CONFIG_SOURCE_DIR}/configure
+        ${SH} ${PKG_CONFIG_SOURCE_DIR}/configure
         --srcdir=${PKG_CONFIG_SOURCE_DIR}
         --prefix=${DEPS_INSTALL_PREFIX}
         --with-internal-glib
@@ -232,7 +248,7 @@ ExternalProject_Add(cairo
         PKG_CONFIG_PATH=${PKG_CONFIG_PATH}
         CFLAGS=${CAIRO_CFLAGS}
         LDFLAGS=${DEPS_LDFLAGS}
-        ${CAIRO_SOURCE_DIR}/configure
+        ${SH} ${CAIRO_SOURCE_DIR}/configure
         --srcdir=${CAIRO_SOURCE_DIR}
         --prefix=${DEPS_INSTALL_PREFIX}
         --enable-static=yes
