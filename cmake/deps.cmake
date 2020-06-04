@@ -121,7 +121,6 @@ ExternalProject_Add(glib
 
 set(PNG_CMAKE_ARGS
     -DCMAKE_C_FLAGS=-I${DEPS_INCLUDE_DIR}
-    -DPNG_BUILD_ZLIB=ON
     -DPNG_STATIC=ON
     -DPNG_SHARED=OFF
     -DPNG_TESTS=OFF
@@ -217,7 +216,6 @@ ExternalProject_Add(cairo
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
         PATH=${DEPS_PATH}
         FREETYPE_CFLAGS=-I${FREETYPE_INCLUDE_DIR}
-        FREETYPE_LIBS=${FREETYPE_LIB}
         PKG_CONFIG_PATH=${PKG_CONFIG_PATH}
         CFLAGS=${CAIRO_CFLAGS}
         LDFLAGS=${DEPS_LDFLAGS}
@@ -238,8 +236,13 @@ set(CAIRO_LIBS
     ${CAIRO_LIB}
     ${PIXMAN_LIB}
     ${PNG_LIB}
-    -lz
 )
+if (UNIX)
+    # Since zlib is installed by default on basically
+    # every Linux distro and macOS, we always link
+    # to it dynamically
+    list(APPEND CAIRO_LIBS -lz)
+endif()
 set(FREETYPE_LIBS
     ${FREETYPE_LIB}
 )
