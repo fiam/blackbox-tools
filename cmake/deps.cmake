@@ -205,6 +205,18 @@ if (APPLE)
     set(sed "sed" "-i''")
 endif()
 
+set(CAIRO_FREETYPE_LIBS "")
+
+if(UNIX AND NOT APPLE)
+    # In Linux, we need to pass libfreetype.a to cairo,
+    # otherwise we get undefined symbols while building
+    # libcairo.a
+    # However, on macOS we can't pass libfreetype.a because
+    # it will be added as an object inside libcairo.a and
+    # then clang will consider it an invalid library.
+    set(CAIRO_FREETYPE_LIBS ${FREETYPE_LIB})
+endif()
+
 ExternalProject_Add(cairo
     URL https://cairographics.org/snapshots/cairo-1.17.2.tar.xz
     URL_HASH SHA1=c5d6f12701f23b2dc2988a5a5586848e70e858fe
@@ -216,6 +228,7 @@ ExternalProject_Add(cairo
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env
         PATH=${DEPS_PATH}
         FREETYPE_CFLAGS=-I${FREETYPE_INCLUDE_DIR}
+        FREETYPE_LIBS=${CAIRO_FREETYPE_LIBS}
         PKG_CONFIG_PATH=${PKG_CONFIG_PATH}
         CFLAGS=${CAIRO_CFLAGS}
         LDFLAGS=${DEPS_LDFLAGS}
