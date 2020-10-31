@@ -4,7 +4,7 @@ project(blackbox-tools VERSION 0.4.4 LANGUAGES C)
 
 # We need this extra variable because CMAKE_OSX_DEPLOYMENT_TARGET
 # is empty until build time, but the arguments for the compiled
-# in dependencies (in SDL2.cmake) are evaluated at cmake configure
+# in dependencies (in conan) are evaluated at cmake configure
 # time, we need the minimum target set by the time the configuration
 # step runs.
 set(OSX_DEPLOYMENT_TARGET "10.10")
@@ -20,6 +20,7 @@ endif()
 
 option(USE_SYSTEM_LIBS "Use system's SDL cairo and freetype instead of building our own" ${USE_SYSTEM_LIBS_DEFAULT})
 
+add_subdirectory(lib)
 add_subdirectory(src)
 
 set(DECODE_TARGET blackbox_decode)
@@ -35,16 +36,52 @@ if(USE_SYSTEM_LIBS)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(cairo REQUIRED IMPORTED_TARGET cairo)
     pkg_check_modules(freetype2 REQUIRED IMPORTED_TARGET freetype2)
-    target_link_libraries(${RENDER_TARGET} PUBLIC
+    target_link_libraries(${RENDER_TARGET} PRIVATE
         PkgConfig::cairo
         PkgConfig::freetype2)
 else()
-    include(cmake/deps.cmake)
-    add_dependencies(${RENDER_TARGET} cairo freetype)
-    target_include_directories(${RENDER_TARGET} PRIVATE
-        ${CAIRO_INCLUDE_DIR} ${FREETYPE_INCLUDE_DIR})
-    target_link_libraries(${RENDER_TARGET} PRIVATE
-        ${CAIRO_LIBS} ${FREETYPE_LIBS})
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan.cmake")
+        message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+        file(DOWNLOAD "https://github.com/conan-io/cmake-conan/raw/v0.15/conan.cmake"
+                 "${CMAKE_BINARY_DIR}/conan.cmake" 
+                 TLS_VERIFY ON)
+    endif()
+
+    include(${CMAKE_BINARY_DIR}/conan.cmake)
+
+    set(conan_settings)
+
+    if(APPLE)        
+        list(APPEND conan_settings os.version=${OSX_DEPLOYMENT_TARGET})
+        list(APPEND conan_settings compiler=apple-clang)
+        list(APPEND conan_settings compiler.libcxx=libc++)
+    endif()
+    if(UNIX AND NOT APPLE)
+        if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+            list(APPEND conan_settings compiler=gcc)
+        elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+            list(APPEND conan_settings compiler=clang)
+        endif()
+    endif()
+
+    set(conan_requires
+        cairo/1.17.2@bincrafters/stable
+        freetype/2.10.4
+    )
+
+    set(conan_build_type Release)
+
+    conan_cmake_run(REQUIRES ${conan_requires}
+                OPTIONS cairo:shared=False freetype:shared=False
+                SETTINGS ${conan_settings}
+                BUILD_TYPE ${conan_build_type}
+                BASIC_SETUP CMAKE_TARGETS
+                BUILD missing)
+
+    target_link_libraries(${RENDER_TARGET} PRIVATE CONAN_PKG::cairo CONAN_PKG::freetype)
+    if(APPLE)
+        target_link_libraries(${RENDER_TARGET} PRIVATE "-framework CoreGraphics")
+    endif()
 endif()
 
 add_executable(${TESTBED_TARGET} ${COMMON_SOURCES} ${TESTBED_SOURCES})
@@ -76,6 +113,9 @@ foreach(exe ${ALL_EXECUTABLES})
     )
     if (UNIX AND NOT APPLE)
         target_link_libraries(${exe} PRIVATE -lm -lpthread)
+    endif()
+    if (WIN32)
+    target_link_libraries(${exe} PRIVATE getopt)
     endif()
 endforeach()
 

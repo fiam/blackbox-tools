@@ -9,9 +9,12 @@ jobs:
   publish:
     strategy:
       matrix:
-        include:
+#        os: [ubuntu-20.04, macos-10.15, windows-2019]
+        os: [macos-10.15]
+        build_type: [static, shared]
+        exclude:
           - os: windows-2019
-            build_type: static
+            build_type: shared
     name: ${{ matrix.os }} (${{ matrix.build_type }})
     runs-on: ${{ matrix.os }}
     steps:
@@ -19,21 +22,6 @@ jobs:
         id: vars
         shell: bash
         run: |
-          if [ ${{ matrix.os }} == windows-2019 ]; then
-            echo "::set-output name=cmake_generator::MinGW Makefiles"
-            # Autotools are too stupid to call binaries with spaces
-            # in their paths, so we need to make a copy of some of
-            # them here.
-            #cp "$(which bash)" .
-            #echo "::add-path::$(pwd)"
-            #S="$(pwd)/bash.exe"
-            ## Convert to windows path
-            #SW=$(echo -n $(echo ${S} | cut -c2):$(echo ${S} | sed 's/\//\\/g' | cut -c3-))
-            #echo "::set-env name=SHELL::${SW}"
-            #echo "::set-env name=MY_SHELL::${SW}"
-          else
-            echo "::set-output name=cmake_generator::Unix Makefiles"
-          fi
           if [ ${{ matrix.build_type }} == shared ]; then
             echo ::set-output name=USE_SYSTEM_LIBS::ON
           else
@@ -42,7 +30,7 @@ jobs:
 
       - name: Install Linux dependencies (common)
         if: ${{ matrix.os == 'ubuntu-20.04' }}
-        run: sudo apt-get update && sudo apt-get -y install build-essential cmake meson ninja-build python3-setuptools zlib1g-dev
+        run: sudo apt-get update && sudo apt-get -y install build-essential gcc g++ cmake python3-pip zlib1g-dev xorg-dev libx11-xcb-dev libxcb-render-util0-dev libxcb-xkb-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-xinerama0-dev xkb-data && sudo python3 -m pip install conan
 
       - name: Install Linux dependencies (shared)
         if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'shared' }}
@@ -50,7 +38,7 @@ jobs:
 
       - name: Install macOS dependencies (common)
         if: ${{ matrix.os == 'macos-10.15' }}
-        run: brew install cmake meson python3
+        run: brew install cmake python3 && python3 -m pip install conan
 
       - name: Install macOS dependencies (shared)
         if: ${{ matrix.os == 'macos-10.15' && matrix.build_type == 'shared' }}
@@ -58,7 +46,10 @@ jobs:
 
       - name: Install Windows dependencies
         if: ${{ matrix.os == 'windows-2019' }}
-        run: pip3 install meson ninja
+        run: pip3 install conan
+
+      - name: Add Conan bincrafters remote
+        run: conan remote add bincrafters https://api.bintray.com/conan/bincrafters/public-conan
 
       - name: Checkout Code
         uses: actions/checkout@v2
@@ -67,12 +58,13 @@ jobs:
         run: |
           mkdir -p build &&
           cd build &&
-          cmake -G "${{ steps.vars.outputs.cmake_generator }}" -DUSE_SYSTEM_LIBS=${{ steps.vars.outputs.USE_SYSTEM_LIBS }} ..
+          cmake -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_LIBS=${{ steps.vars.outputs.USE_SYSTEM_LIBS }} ..; cat `/Users/runner/.conan/data/gperf/3.1/_/_/build/898a9aa06c32fd65090511934b1e1fedd9cde674/source_subfolder/lib/config.log
 
       - name: Build
-        run: cd build && make release
+        run: cd build && cmake --build . --target release
 
       - name: Upload binaries
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: svenstaro/upload-release-action@v1-release
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
